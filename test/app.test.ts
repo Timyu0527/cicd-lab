@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app';
 
+const buildTestApp = () =>
+  buildApp({
+    logger: false,
+    forceCloseConnections: true
+  });
+
 describe('Fastify app', () => {
   it('GET /health returns ok status', async () => {
-    const app = buildApp({ logger: false });
+    const app = buildTestApp();
     const response = await app.inject({
       method: 'GET',
       url: '/health'
@@ -15,7 +21,7 @@ describe('Fastify app', () => {
   });
 
   it('GET / returns app message and version', async () => {
-    const app = buildApp({ logger: false });
+    const app = buildTestApp();
     const response = await app.inject({
       method: 'GET',
       url: '/'

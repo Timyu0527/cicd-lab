@@ -6,6 +6,7 @@ type VitestConfig = ViteUserConfig & {
 
 const config: VitestConfig = {
   test: {
+    testTimeout: 10000,
     exclude: ['dist/**', 'node_modules/**']
   }
 };

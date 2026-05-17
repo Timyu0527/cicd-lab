@@ -1,0 +1,95 @@
+name: CI 314551127
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-314551127-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-checks:
+    name: Typecheck, format, and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Prettier check
+        run: npm run format:check
+
+      - name: Run tests with JUnit report
+        run: |
+          mkdir -p reports
+          npm test -- --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml
+
+      - name: Add test results to job summary
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const reportPath = 'reports/vitest-junit.xml';
+          const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+
+          if (!summaryPath) {
+            process.exit(0);
+          }
+
+          if (!fs.existsSync(reportPath)) {
+            fs.appendFileSync(
+              summaryPath,
+              '## Vitest Test Results\n\nNo JUnit report was generated. Check earlier CI steps for details.\n'
+            );
+            process.exit(0);
+          }
+
+          const xml = fs.readFileSync(reportPath, 'utf8');
+          const rootTag = xml.match(/<testsuites\b[^>]*>/)?.[0] ?? xml.match(/<testsuite\b[^>]*>/)?.[0] ?? '';
+          const attr = (name) => Number(rootTag.match(new RegExp(`${name}="([^"]*)"`))?.[1] ?? 0);
+
+          const total = attr('tests');
+          const failures = attr('failures');
+          const errors = attr('errors');
+          const skipped = attr('skipped');
+          const duration = attr('time').toFixed(3);
+          const passed = Math.max(total - failures - errors - skipped, 0);
+
+          const lines = [
+            '## Vitest Test Results',
+            '',
+            '| Total | Passed | Failed | Errors | Skipped | Duration |',
+            '| ---: | ---: | ---: | ---: | ---: | ---: |',
+            `| ${total} | ${passed} | ${failures} | ${errors} | ${skipped} | ${duration}s |`,
+            ''
+          ];
+
+          fs.appendFileSync(summaryPath, `${lines.join('\n')}\n`);
+          NODE
+
+      - name: Upload test report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-junit-report
+          path: reports/vitest-junit.xml
+          if-no-files-found: warn
